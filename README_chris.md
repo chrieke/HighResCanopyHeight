@@ -3,11 +3,23 @@
 Run in Colab, switch to A100 GPU runtime
 
 Install 
+
 ```
-git clone https://github.com/chrieke/HighResCanopyHeight.git
+git clone https://github.com/facebookresearch/HighResCanopyHeight.git
+#git clone https://github.com/chrieke/HighResCanopyHeight.git
+
 cd HighResCanopyHeight
-pip install -r requirements.txt
+#pip install -r requirements.txt
+
+pip install awscli
+pip install rasterio numpy pandas matplotlib
+pip install torchvision==0.15.2
+pip install pytorch-lightning==1.7
+pip install torchmetrics==0.11.4 
+pip install torchtext --upgrade
+pip install torch --upgrade
 ```
+
 Download data and pretrained models:
 ```
 aws s3 --no-sign-request cp --recursive s3://dataforgood-fb-data/forests/v1/models/ .     # NEON test data
@@ -33,18 +45,7 @@ poetry run python inference.py --checkpoint saved_checkpoints/SSLhuge_satellite.
 
 # Original Installation
 
-```
-git clone https://github.com/facebookresearch/HighResCanopyHeight.git
 
-pip install awscli
-pip install rasterio numpy pandas matplotlib
-pip install torchvision==0.15.2
-pip install pytorch-lightning==1.7
-pip install torchmetrics==0.11.4 
-
-pip install torchtext --upgrade
-pip install torch --upgrade
-```
 
 Troubleshooting:
 brew install libtiff
