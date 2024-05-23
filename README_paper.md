@@ -87,3 +87,8 @@ https://www.science.org/doi/10.1126/sciadv.adh4097
 in gee: https://ee-chm-eu-2019.projects.earthengine.app/view/euchm
 code: https://zenodo.org/records/8156190
 
+
+- Wagner et all: Sub-Meter Tree Height Mapping of California using Aerial Images and LiDAR-Informed U-Net Model
+- CHM from on US NAIP
+- Good results, meta satmodel comes compares reasonably well
+https://arxiv.org/abs/2306.01936
