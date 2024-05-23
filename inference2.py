@@ -84,7 +84,7 @@ class NeonDataset(torch.utils.data.Dataset):
     new_norm = True
     no_norm = False
     size_multiplier = 6 # number of times crops can be used horizontally
-    trained_rgb = False
+    trained_rgb = None
 
     def __init__(self, model_norm):
         self.model_norm = model_norm
@@ -151,7 +151,7 @@ if __name__ == '__main__':
     output_dir = Path.cwd() / "output_inference"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    device = 'cuda:0'
+    device = "cpu" #'cuda:0' #TODO search cpu, other locations! if 'compressed' in args.checkpoint:
 
     # 1- load SSL model
     ssl_path = './drive/MyDrive/meta-tree-height/saved_checkpoints/compressed_SSLlarge.pth'
