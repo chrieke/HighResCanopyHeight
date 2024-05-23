@@ -110,8 +110,13 @@ class NeonDataset(torch.utils.data.Dataset):
         if self.src_img == 'neon':
             l = self.df.iloc[ix]
         x = list(range(l.bord_x, l.imsize-l.bord_x-self.size, self.size))[jx]
-        y = list(range(l.bord_y, l.imsize-l.bord_y-self.size, self.size))[jy]  
-        img = TF.to_tensor(Image.open(self.root_dir / l[self.src_img]).crop((x, y, x+self.size, y+self.size)))
+        y = list(range(l.bord_y, l.imsize-l.bord_y-self.size, self.size))[jy]
+
+
+        img = Image.open(self.root_dir / l[self.src_img])
+        img = img.crop((x, y, x+self.size, y+self.size))
+        img = TF.to_tensor(img)
+        print("BBBB", img.shape)
         chm = TF.to_tensor(Image.open(self.root_dir / l.chm).crop((x, y, x+self.size, y+self.size)))
         chm[chm<0] = 0
         

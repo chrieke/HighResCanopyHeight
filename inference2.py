@@ -3,6 +3,7 @@
 # This source code is licensed under the Apache License, Version 2.0
 # found in the LICENSE file in the root directory of this source tree.
 
+import copy
 import torch
 import pandas as pd
 import numpy as np
@@ -15,6 +16,7 @@ from PIL import Image
 import torchvision.transforms.functional as TF
 import rasterio
 import rasterio.windows
+from rasterio.crs import CRS
 
 from models.backbone import SSLVisionTransformer
 from models.dpt_head import DPTHead
@@ -87,19 +89,21 @@ class NeonDataset(torch.utils.data.Dataset):
     # trained_rgb = None
 
     def __init__(self, base_dir, model_norm):
-        self.base_dir = Path(base_dir)
-        self.root_dir = base_dir / "data/images/"
-        #self.df_path = base_dir / "data/neon_test_data.csv"
+        self.root_dir = Path(base_dir) / "data/images/"
+        self.image_paths = list(self.root_dir.glob("*.TIF"))
         self.model_norm = model_norm
         self.chip_size = 256 #TODO
-        self.df = pd.read_csv(self.df_path, index_col=0)
+        #self.df_path = base_dir / "data/neon_test_data.csv"
+        #self.df = pd.read_csv(self.df_path, index_col=0)
 
     def __len__(self): #TODO
-        length = len(list(self.base_dir.glob("*.TIF")))
+        length = len(self.image_paths)
+        if not length:
+            print("DATASET LENGTH IS 0!!!!!!!!!!!!!")
         return length
 
     def __getitem__(self, i):
-        image_fp = list(self.base_dir.glob("*.TIF"))[i]
+        image_fp = self.image_paths[i]
 
         # TODO iterative, maybe another library
         col_off, row_off, width, height = 0, 0, self.chip_size, self.chip_size
@@ -108,18 +112,19 @@ class NeonDataset(torch.utils.data.Dataset):
         with rasterio.open(image_fp) as src:
             clipped_img = src.read([1,2,3], window=window)
             clipped_transform = rasterio.windows.transform(window, src.transform)
-            clipped_profile = src.profile.copy()
-            clipped_profile.update(
+            profile = src.profile.copy()
+            profile.update(
                 {
                     "transform": clipped_transform,
                     "width": clipped_img.shape[1],
                     "height": clipped_img.shape[2],
-                    "count": 3
+                    "count": 1,
+                    "crs": str(src.crs.to_epsg())
                 }
             )
+            profile.pop("nodata", None)
 
-
-        img = TF.to_tensor(clipped_img)
+        img = TF.to_tensor(np.moveaxis(clipped_img, 0, -1)) # Change from rasterios # Shape (3, 256, 256) to (256, 256, 3), torch expects that
 
         # image normalization using learned quantiles of pairs of Maxar/Neon images
         x = torch.unsqueeze(img, dim=0)
@@ -132,18 +137,18 @@ class NeonDataset(torch.utils.data.Dataset):
                 range(3)]
         p95In = [np.percentile(img[i, :, :].flatten(), 95) for i in
                  range(3)]
-        normIn = img.clone()
+        normalized_img = img.clone()
         for i in range(3):
-            normIn[i, :, :] = (img[i, :, :] - p5In[i]) * (
+            normalized_img[i, :, :] = (img[i, :, :] - p5In[i]) * (
                         (p95I[i] - p5I[i]) / (p95In[i] - p5In[i])) + \
                               p5I[i]
 
-        return {'img': normIn, "clipped_profile": clipped_profile}
+        return normalized_img, profile # batch must contain tensors, numpy arrays, numbers, dicts or lists, no rasterio, no nodata etc.
 
 
 if __name__ == '__main__':
-    base_dir = Path.cwd()
-    #base_dir = Path('./drive/MyDrive/meta-tree-height')
+    #base_dir = Path.cwd()
+    base_dir = Path('./drive/MyDrive/meta-tree-height')
 
     output_dir = base_dir / "output_inference"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -172,25 +177,30 @@ if __name__ == '__main__':
     model_norm = model_norm.eval()
     model_norm.load_state_dict(state_dict)
 
+    # TODO: Here with dataset loader?
     # Run prediction
     dataset = NeonDataset(base_dir, model_norm)
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=16, shuffle=False, #TODO: shuffe=True
-                                             num_workers=10)
+    normalized_image, profile = dataset.__getitem__(0)
 
-    for batch in tqdm(dataloader):
-        batch = {k: v.to(device) for k, v in batch.items() if
-                 isinstance(v, torch.Tensor)}
-        normalized_image = image_normalizer(batch['img'])
-        pred = model(normalized_image)
-        pred = pred.cpu().detach().relu()
+    # Can maybe be removed
+    out_profile = copy.deepcopy(profile)
+    out_profile["crs"] = CRS.from_epsg(out_profile['crs'])
+    normalized_image = normalized_image.to(device)
+    normalized_image = image_normalizer(normalized_image)
+    print(normalized_image.shape)
 
-        for idx in range(pred.shape[0]):
-            pred_chm_array = pred[idx][0].detach().numpy()
+    normalized_image = normalized_image.unsqueeze(0) #adds batch dimension (1,3,256,256) instead of (3,256,256)
+    pred = model(normalized_image)
+    pred = pred.cpu().detach().relu()
 
+    for idx in range(pred.shape[0]): #is this only  asingle image always?
+        pred_chm_array = pred[idx][0].detach().numpy()
 
-            # Export
-            #plt.imsave(f'output_inference/pred_{idx}.png', pred_chm_array, cmap='viridis')
-            geotiff_file_out = f'output_inference/pred_{idx}.tif'
-            # Save the prediction as png image in folder
-            with rasterio.open(geotiff_file_out, 'w', **batch['clipped_profile']) as dst:
-                dst.write(pred_chm_array, 1)
+        # Export
+        plt.imsave(f'output_inference/AAApred_{idx}.png', pred_chm_array, cmap='viridis')
+        geotiff_file_out = base_dir / f'output_inference/pred_{idx}.tif'
+        # Save the prediction as png image in folder
+        with rasterio.open(geotiff_file_out, 'w', **out_profile) as dst:
+            dst.write(pred_chm_array, 1)
+
+        print("FINISHED!, exported to", geotiff_file_out)
