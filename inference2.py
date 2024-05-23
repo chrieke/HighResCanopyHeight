@@ -90,36 +90,62 @@ class NeonDataset(torch.utils.data.Dataset):
 
         # number of times crops can be used horizontally
         self.size_multiplier = 6
+        self.src_img == 'neon' #TODO Remove
+        self.new_norm = True #TODO Remove
+        self.trained_rgb = False
 
     def __len__(self):
+        if self.src_img == 'neon':
+            return 30 * len(self.df)
         return len(self.df)
 
     def __getitem__(self, i):
-        l = self.df.iloc[i]
-
-        # Select cutout
-        x, y = 0, 0
-        img = TF.to_tensor(Image.open(self.root_dir / l["neon"]).crop(
+        n = self.size_multiplier
+        ix, jx, jy = i // (n ** 2), (i % (n ** 2)) // n, (i % (n ** 2)) % n
+        if self.src_img == 'neon':
+            l = self.df.iloc[ix]
+        x = list(range(l.bord_x, l.imsize - l.bord_x - self.size, self.size))[
+            jx]
+        y = list(range(l.bord_y, l.imsize - l.bord_y - self.size, self.size))[
+            jy]
+        img = TF.to_tensor(Image.open(self.root_dir / l[self.src_img]).crop(
             (x, y, x + self.size, y + self.size)))
+        chm = TF.to_tensor(Image.open(self.root_dir / l.chm).crop(
+            (x, y, x + self.size, y + self.size)))
+        chm[chm < 0] = 0
 
-        # image normalization using learned quantiles of pairs of Maxar/Neon images
-        x = torch.unsqueeze(img, dim=0)
-        norm_img = self.model_norm(x).detach()
-        p5I = [norm_img[0][0].item(), norm_img[0][1].item(),
-               norm_img[0][2].item()]
-        p95I = [norm_img[0][3].item(), norm_img[0][4].item(),
-                norm_img[0][5].item()]
+        if not self.trained_rgb:
+            if self.src_img == 'neon':
+                if self.no_norm:
+                    normIn = img
+                else:
+                    if self.new_norm:
+                        # image image normalization using learned quantiles of pairs of Maxar/Neon images
+                        x = torch.unsqueeze(img, dim=0)
+                        norm_img = self.model_norm(x).detach()
+                        p5I = [norm_img[0][0].item(), norm_img[0][1].item(),
+                               norm_img[0][2].item()]
+                        p95I = [norm_img[0][3].item(), norm_img[0][4].item(),
+                                norm_img[0][5].item()]
+                    else:
+                        # apply image normalization to aerial images, matching color intensity of maxar images
+                        I = TF.to_tensor(
+                            Image.open(self.root_dir / l['maxar']).crop(
+                                (x, y, x + s, y + s)))
+                        p5I = [np.percentile(I[i, :, :].flatten(), 5) for i in
+                               range(3)]
+                        p95I = [np.percentile(I[i, :, :].flatten(), 95) for i in
+                                range(3)]
+                    p5In = [np.percentile(img[i, :, :].flatten(), 5) for i in
+                            range(3)]
 
-        p5In = [np.percentile(img[i, :, :].flatten(), 5) for i in
-                range(3)]
-
-        p95In = [np.percentile(img[i, :, :].flatten(), 95) for i in
-                 range(3)]
-        normIn = img.clone()
-        for i in range(3):
-            normIn[i, :, :] = (img[i, :, :] - p5In[i]) * (
-                        (p95I[i] - p5I[i]) / (p95In[i] - p5In[i])) + \
-                              p5I[i]
+                    p95In = [np.percentile(img[i, :, :].flatten(), 95) for i in
+                             range(3)]
+                    normIn = img.clone()
+                    for i in range(3):
+                        normIn[i, :, :] = (img[i, :, :] - p5In[i]) * (
+                                    (p95I[i] - p5I[i]) / (p95In[i] - p5In[i])) + \
+                                          p5I[i]
 
         return {'img': normIn}
 
