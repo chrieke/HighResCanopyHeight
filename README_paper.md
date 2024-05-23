@@ -1,3 +1,8 @@
+
+gee app, global: https://meta-forest-monitoring-okw37.projects.earthengine.app/view/canopyheight
+
+
+
 # WHAT & THEORY
 - Vegetation structure mapping, tree canopy height
 - highres tree canopy height map for california and Sao Paulo
@@ -24,6 +29,8 @@ is promising.
 
 # DATA & PREPROCESSING
 - Maxar 2017-2020, around 0.5m GSD (webmercator, bing tiling scheme, zoom lvl 15, 2048x2048px, ox size 0.59m at equator). and 1m GSD aerial lidar
+
+
 
 - Get input data:
 - lat, lon

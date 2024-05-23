@@ -37,6 +37,10 @@ Run inference on custom image
 https://github.com/facebookresearch/HighResCanopyHeight/issues/3
 
 - test images e.g. 2184x2184, 1766x1766, 1765  something like that.
+- 0.59m res
+- The 2048px image = 1208m in reality. 
+- The model is applied to cutouts of that, 250m, would be around 423px tiles
+- Is then applied to tiles of that, 
 - RGB only, uint8
 - images are not georeferenced
 ```
