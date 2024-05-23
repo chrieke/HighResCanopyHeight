@@ -125,7 +125,8 @@ class NeonDataset(torch.utils.data.Dataset):
 
 
 if __name__ == '__main__':
-    os.system("mkdir output_inference")
+    output_dir = Path.cwd() / "output_inference"
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     device = 'cuda:0'
 
