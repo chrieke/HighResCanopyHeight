@@ -13,6 +13,8 @@ import torch.nn as nn
 from tqdm import tqdm
 from PIL import Image
 import torchvision.transforms.functional as TF
+import rasterio
+import rasterio.windows
 
 from models.backbone import SSLVisionTransformer
 from models.dpt_head import DPTHead
@@ -85,24 +87,39 @@ class NeonDataset(torch.utils.data.Dataset):
     # trained_rgb = None
 
     def __init__(self, base_dir, model_norm):
+        self.base_dir = Path(base_dir)
         self.root_dir = base_dir / "data/images/"
-        self.df_path = base_dir / "data/neon_test_data.csv"
+        #self.df_path = base_dir / "data/neon_test_data.csv"
         self.model_norm = model_norm
         self.chip_size = 256 #TODO
         self.df = pd.read_csv(self.df_path, index_col=0)
 
-    def __len__(self):
-        if self.src_img == 'neon':
-            return 30 * len(self.df)
-        return len(self.df)
+    def __len__(self): #TODO
+        length = len(list(self.base_dir.glob("*.TIF")))
+        return length
 
     def __getitem__(self, i):
-        l = self.df.iloc[i]
+        image_fp = list(self.base_dir.glob("*.TIF"))[i]
 
-        # Select cutout
-        x, y = 0, 0
-        img = TF.to_tensor(Image.open(self.root_dir / l["neon"]).crop(
-            (x, y, x + self.size, y + self.size)))
+        # TODO iterative, maybe another library
+        col_off, row_off, width, height = 0, 0, self.chip_size, self.chip_size
+        window = rasterio.windows.Window(col_off, row_off, width, height)
+
+        with rasterio.open(image_fp) as src:
+            clipped_img = src.read([1,2,3], window=window)
+            clipped_transform = rasterio.windows.transform(window, src.transform)
+            clipped_profile = src.profile.copy()
+            clipped_profile.update(
+                {
+                    "transform": clipped_transform,
+                    "width": clipped_img.shape[1],
+                    "height": clipped_img.shape[2],
+                    "count": 3
+                }
+            )
+
+
+        img = TF.to_tensor(clipped_img)
 
         # image normalization using learned quantiles of pairs of Maxar/Neon images
         x = torch.unsqueeze(img, dim=0)
@@ -111,10 +128,8 @@ class NeonDataset(torch.utils.data.Dataset):
                norm_img[0][2].item()]
         p95I = [norm_img[0][3].item(), norm_img[0][4].item(),
                 norm_img[0][5].item()]
-
         p5In = [np.percentile(img[i, :, :].flatten(), 5) for i in
                 range(3)]
-
         p95In = [np.percentile(img[i, :, :].flatten(), 95) for i in
                  range(3)]
         normIn = img.clone()
@@ -123,7 +138,7 @@ class NeonDataset(torch.utils.data.Dataset):
                         (p95I[i] - p5I[i]) / (p95In[i] - p5In[i])) + \
                               p5I[i]
 
-        return {'img': normIn}
+        return {'img': normIn, "clipped_profile": clipped_profile}
 
 
 if __name__ == '__main__':
@@ -169,8 +184,13 @@ if __name__ == '__main__':
         pred = model(normalized_image)
         pred = pred.cpu().detach().relu()
 
-        idx = 0
-        pred_chm_array = pred[idx][0].detach().numpy()
+        for idx in range(pred.shape[0]):
+            pred_chm_array = pred[idx][0].detach().numpy()
 
-        # Save the prediction as png image in folder
-        plt.imsave(f'output_inference/pred_{idx}.png', pred_chm_array, cmap='viridis')
+
+            # Export
+            #plt.imsave(f'output_inference/pred_{idx}.png', pred_chm_array, cmap='viridis')
+            geotiff_file_out = f'output_inference/pred_{idx}.tif'
+            # Save the prediction as png image in folder
+            with rasterio.open(geotiff_file_out, 'w', **batch['clipped_profile']) as dst:
+                dst.write(pred_chm_array, 1)
