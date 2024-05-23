@@ -3,14 +3,11 @@
 # This source code is licensed under the Apache License, Version 2.0
 # found in the LICENSE file in the root directory of this source tree.
 
-import argparse
-import os
 import torch
 import pandas as pd
 import numpy as np
 import torchvision.transforms as T
 import matplotlib.pyplot as plt
-import torchmetrics
 from pathlib import Path
 import torch.nn as nn
 from tqdm import tqdm
@@ -85,12 +82,13 @@ class NeonDataset(torch.utils.data.Dataset):
     # TODO: Remove all these
     src_img = 'neon'
     new_norm = True
+    no_norm = False
     size_multiplier = 6 # number of times crops can be used horizontally
     trained_rgb = False
 
     def __init__(self, model_norm):
         self.model_norm = model_norm
-        self.size = 256 #TODO
+        self.chip_size = 256 #TODO
         self.df = pd.read_csv(self.df_path, index_col=0)
 
     def __len__(self):
@@ -103,14 +101,14 @@ class NeonDataset(torch.utils.data.Dataset):
         ix, jx, jy = i // (n ** 2), (i % (n ** 2)) // n, (i % (n ** 2)) % n
         if self.src_img == 'neon':
             l = self.df.iloc[ix]
-        x = list(range(l.bord_x, l.imsize - l.bord_x - self.size, self.size))[
+        x = list(range(l.bord_x, l.imsize - l.bord_x - self.chip_size, self.chip_size))[
             jx]
-        y = list(range(l.bord_y, l.imsize - l.bord_y - self.size, self.size))[
+        y = list(range(l.bord_y, l.imsize - l.bord_y - self.chip_size, self.chip_size))[
             jy]
         img = TF.to_tensor(Image.open(self.root_dir / l[self.src_img]).crop(
-            (x, y, x + self.size, y + self.size)))
+            (x, y, x + self.chip_size, y + self.chip_size)))
         chm = TF.to_tensor(Image.open(self.root_dir / l.chm).crop(
-            (x, y, x + self.size, y + self.size)))
+            (x, y, x + self.chip_size, y + self.chip_size)))
         chm[chm < 0] = 0
 
         if not self.trained_rgb:
