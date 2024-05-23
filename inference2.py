@@ -77,16 +77,16 @@ class SSLModule(pl.LightningModule):
 
 
 class NeonDataset(torch.utils.data.Dataset):
-    root_dir = Path('./drive/MyDrive/meta-tree-height/data/images/')
-    df_path = './drive/MyDrive/meta-tree-height/data/neon_test_data.csv'
-    # TODO: Remove all these
-    src_img = 'neon'
-    new_norm = True
-    no_norm = False
-    size_multiplier = 6 # number of times crops can be used horizontally
-    trained_rgb = None
+    # # TODO: Remove all these
+    # src_img = 'neon'
+    # new_norm = True
+    # no_norm = False
+    # size_multiplier = 6 # number of times crops can be used horizontally
+    # trained_rgb = None
 
-    def __init__(self, model_norm):
+    def __init__(self, base_dir, model_norm):
+        self.root_dir = base_dir / "data/images/"
+        self.df_path = base_dir / "data/neon_test_data.csv"
         self.model_norm = model_norm
         self.chip_size = 256 #TODO
         self.df = pd.read_csv(self.df_path, index_col=0)
@@ -97,65 +97,47 @@ class NeonDataset(torch.utils.data.Dataset):
         return len(self.df)
 
     def __getitem__(self, i):
-        n = self.size_multiplier
-        ix, jx, jy = i // (n ** 2), (i % (n ** 2)) // n, (i % (n ** 2)) % n
-        if self.src_img == 'neon':
-            l = self.df.iloc[ix]
-        x = list(range(l.bord_x, l.imsize - l.bord_x - self.chip_size, self.chip_size))[
-            jx]
-        y = list(range(l.bord_y, l.imsize - l.bord_y - self.chip_size, self.chip_size))[
-            jy]
-        img = TF.to_tensor(Image.open(self.root_dir / l[self.src_img]).crop(
-            (x, y, x + self.chip_size, y + self.chip_size)))
-        chm = TF.to_tensor(Image.open(self.root_dir / l.chm).crop(
-            (x, y, x + self.chip_size, y + self.chip_size)))
-        chm[chm < 0] = 0
+        l = self.df.iloc[i]
 
-        if not self.trained_rgb:
-            if self.src_img == 'neon':
-                if self.no_norm:
-                    normIn = img
-                else:
-                    if self.new_norm:
-                        # image image normalization using learned quantiles of pairs of Maxar/Neon images
-                        x = torch.unsqueeze(img, dim=0)
-                        norm_img = self.model_norm(x).detach()
-                        p5I = [norm_img[0][0].item(), norm_img[0][1].item(),
-                               norm_img[0][2].item()]
-                        p95I = [norm_img[0][3].item(), norm_img[0][4].item(),
-                                norm_img[0][5].item()]
-                    else:
-                        # apply image normalization to aerial images, matching color intensity of maxar images
-                        I = TF.to_tensor(
-                            Image.open(self.root_dir / l['maxar']).crop(
-                                (x, y, x + s, y + s)))
-                        p5I = [np.percentile(I[i, :, :].flatten(), 5) for i in
-                               range(3)]
-                        p95I = [np.percentile(I[i, :, :].flatten(), 95) for i in
-                                range(3)]
-                    p5In = [np.percentile(img[i, :, :].flatten(), 5) for i in
-                            range(3)]
+        # Select cutout
+        x, y = 0, 0
+        img = TF.to_tensor(Image.open(self.root_dir / l["neon"]).crop(
+            (x, y, x + self.size, y + self.size)))
 
-                    p95In = [np.percentile(img[i, :, :].flatten(), 95) for i in
-                             range(3)]
-                    normIn = img.clone()
-                    for i in range(3):
-                        normIn[i, :, :] = (img[i, :, :] - p5In[i]) * (
-                                    (p95I[i] - p5I[i]) / (p95In[i] - p5In[i])) + \
-                                          p5I[i]
+        # image normalization using learned quantiles of pairs of Maxar/Neon images
+        x = torch.unsqueeze(img, dim=0)
+        norm_img = self.model_norm(x).detach()
+        p5I = [norm_img[0][0].item(), norm_img[0][1].item(),
+               norm_img[0][2].item()]
+        p95I = [norm_img[0][3].item(), norm_img[0][4].item(),
+                norm_img[0][5].item()]
+
+        p5In = [np.percentile(img[i, :, :].flatten(), 5) for i in
+                range(3)]
+
+        p95In = [np.percentile(img[i, :, :].flatten(), 95) for i in
+                 range(3)]
+        normIn = img.clone()
+        for i in range(3):
+            normIn[i, :, :] = (img[i, :, :] - p5In[i]) * (
+                        (p95I[i] - p5I[i]) / (p95In[i] - p5In[i])) + \
+                              p5I[i]
 
         return {'img': normIn}
 
 
 if __name__ == '__main__':
-    output_dir = Path.cwd() / "output_inference"
+    base_dir = Path.cwd()
+    #base_dir = Path('./drive/MyDrive/meta-tree-height')
+
+    output_dir = base_dir / "output_inference"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     device = "cpu" #'cuda:0' #TODO search cpu, other locations! if 'compressed' in args.checkpoint:
 
     # 1- load SSL model
-    ssl_path = './drive/MyDrive/meta-tree-height/saved_checkpoints/compressed_SSLlarge.pth'
-    model = SSLModule(ssl_path=ssl_path)
+    ssl_path = base_dir / 'saved_checkpoints/compressed_SSLlarge.pth'
+    model = SSLModule(ssl_path=str(ssl_path))
     model.to(device)
     model = model.eval()
 
@@ -164,8 +146,8 @@ if __name__ == '__main__':
     image_normalizer = image_normalizer.to(device)
 
     # 3- Load model to normalize aerial images to match intensities from satellite images.
-    norm_path = './drive/MyDrive/meta-tree-height/saved_checkpoints/aerial_normalization_quantiles_predictor.ckpt'
-    ckpt = torch.load(norm_path, map_location='cpu')
+    norm_path = base_dir / 'saved_checkpoints/aerial_normalization_quantiles_predictor.ckpt'
+    ckpt = torch.load(str(norm_path), map_location='cpu')
     state_dict = ckpt['state_dict']
     for k in list(state_dict.keys()):
         if 'backbone.' in k:
@@ -176,7 +158,7 @@ if __name__ == '__main__':
     model_norm.load_state_dict(state_dict)
 
     # Run prediction
-    dataset = NeonDataset(model_norm)
+    dataset = NeonDataset(base_dir, model_norm)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=16, shuffle=False, #TODO: shuffe=True
                                              num_workers=10)
 
