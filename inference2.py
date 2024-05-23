@@ -153,7 +153,7 @@ if __name__ == '__main__':
 
     device = 'cuda:0'
 
-    # 2- load SSL model
+    # 1- load SSL model
     ssl_path = './drive/MyDrive/meta-tree-height/saved_checkpoints/compressed_SSLlarge.pth'
     model = SSLModule(ssl_path=ssl_path)
     model.to(device)

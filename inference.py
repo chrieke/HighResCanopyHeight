@@ -155,10 +155,8 @@ def evaluate(model,
              device = 'cuda:0', 
              no_norm = False, 
              display = False):
-      
+
     dataset_key = 'neon_aerial'
-    
-    print("normtype", normtype)    
     
     # choice of the normalization of aerial images. 
     # i- For inference on satellite images args.normtype should be set to 0; 
@@ -175,7 +173,10 @@ def evaluate(model,
         new_norm=False
     elif normtype == 2:
         new_norm=True
-    
+
+    print(
+        f"AAAA    norm {norm}, name {name}, bs {bs}, trained_rgb {trained_rgb}, normtype {normtype}, device {device}, no_norm {no_norm}, display {display}")
+
     ds = NeonDataset( model_norm, new_norm, domain='test', src_img='neon', trained_rgb=trained_rgb, no_norm=no_norm)
     dataloader = torch.utils.data.DataLoader(ds, batch_size=bs, shuffle=True, num_workers=10)
         
