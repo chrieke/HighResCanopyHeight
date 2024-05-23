@@ -82,17 +82,16 @@ class SSLModule(pl.LightningModule):
 class NeonDataset(torch.utils.data.Dataset):
     root_dir = Path('./drive/MyDrive/meta-tree-height/data/images/')
     df_path = './drive/MyDrive/meta-tree-height/data/neon_test_data.csv'
+    # TODO: Remove all these
+    src_img = 'neon'
+    new_norm = True
+    size_multiplier = 6 # number of times crops can be used horizontally
+    trained_rgb = False
 
     def __init__(self, model_norm):
         self.model_norm = model_norm
         self.size = 256 #TODO
         self.df = pd.read_csv(self.df_path, index_col=0)
-
-        # number of times crops can be used horizontally
-        self.size_multiplier = 6
-        self.src_img == 'neon' #TODO Remove
-        self.new_norm = True #TODO Remove
-        self.trained_rgb = False
 
     def __len__(self):
         if self.src_img == 'neon':
