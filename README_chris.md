@@ -31,6 +31,7 @@ Run test inference
 #python inference.py --checkpoint saved_checkpoints/SSLhuge_satellite.pth 
 python inference.py --checkpoint saved_checkpoints/SSLhuge_satellite.pth --display True 
 #poetry run python inference.py --checkpoint saved_checkpoints/compressed_SSLhuge.pth --display True 
+python HighResCanopyHeight/inference2.py --checkpoint ./drive/MyDrive/meta-tree-height/saved_checkpoints/SSLhuge_satellite.pth --display True  
 ```
 
 Run inference on custom image
