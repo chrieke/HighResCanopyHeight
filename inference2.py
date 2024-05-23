@@ -291,14 +291,14 @@ def parse_args():
         description='test a model')
     parser.add_argument('--checkpoint', type=str,
                         help='CHM pred checkpoint file',
-                        default='/drive/MyDrive/meta-tree-height/saved_checkpoints/compressed_SSLlarge.pth')
+                        default='./drive/MyDrive/meta-tree-height/saved_checkpoints/compressed_SSLlarge.pth')
     parser.add_argument('--name', type=str, help='run name',
                         default='output_inference')
     parser.add_argument('--trained_rgb', type=str,
                         help='True if model was finetuned on aerial data')
     parser.add_argument('--normnet', type=str,
                         help='path to a normalization network',
-                        default='/drive/MyDrive/meta-tree-height/saved_checkpoints/aerial_normalization_quantiles_predictor.ckpt')
+                        default='./drive/MyDrive/meta-tree-height/saved_checkpoints/aerial_normalization_quantiles_predictor.ckpt')
     parser.add_argument('--normtype', type=int,
                         help='0: no norm; 1: old norm, 2: new norm', default=2)
     parser.add_argument('--display', type=bool, help='saving outputs in images')
