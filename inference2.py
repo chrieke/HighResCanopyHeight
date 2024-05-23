@@ -80,8 +80,7 @@ class SSLModule(pl.LightningModule):
 
 
 class NeonDataset(torch.utils.data.Dataset):
-    path = './drive/MyDrive/meta-tree-height/data/images/'
-    root_dir = Path(path)
+    root_dir = Path('./drive/MyDrive/meta-tree-height/data/images/')
     df_path = './drive/MyDrive/meta-tree-height/data/neon_test_data.csv'
 
     def __init__(self, model_norm):
@@ -104,7 +103,7 @@ class NeonDataset(torch.utils.data.Dataset):
             jx]
         y = list(range(l.bord_y, l.imsize - l.bord_y - self.size, self.size))[
             jy]
-        img = TF.to_tensor(Image.open(self.root_dir / l[self.src_img]).crop(
+        img = TF.to_tensor(Image.open(self.root_dir / l['maxar']).crop(
             (x, y, x + self.size, y + self.size)))
         chm = TF.to_tensor(Image.open(self.root_dir / l.chm).crop(
             (x, y, x + self.size, y + self.size)))
