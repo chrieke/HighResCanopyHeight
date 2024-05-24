@@ -35,7 +35,7 @@ class SSLAE(nn.Module):
                 num_heads=20,
                 out_indices=(9, 16, 22, 29),
                 depth=32,
-                pretrained=pretrained
+                pretrained=pretrained,
             )
             self.decode_head = DPTHead(
                 classify=classify,
@@ -54,25 +54,25 @@ class SSLAE(nn.Module):
 
 
 class SSLModule(pl.LightningModule):
-    def __init__(self,
-                 ssl_path="compressed_SSLbaseline.pth"):
+    def __init__(self, ssl_path="compressed_SSLbaseline.pth"):
         super().__init__()
 
-        if 'huge' in ssl_path:
+        if "huge" in ssl_path:
             self.chm_module_ = SSLAE(classify=True, huge=True).eval()
         else:
             self.chm_module_ = SSLAE(classify=True, huge=False).eval()
 
-        if 'compressed' in ssl_path:
-            ckpt = torch.load(ssl_path, map_location='cpu')
+        if "compressed" in ssl_path:
+            ckpt = torch.load(ssl_path, map_location="cpu")
             self.chm_module_ = torch.quantization.quantize_dynamic(
                 self.chm_module_,
                 {torch.nn.Linear, torch.nn.Conv2d, torch.nn.ConvTranspose2d},
-                dtype=torch.qint8)
+                dtype=torch.qint8,
+            )
             self.chm_module_.load_state_dict(ckpt, strict=False)
         else:
             ckpt = torch.load(ssl_path)
-            state_dict = ckpt['state_dict']
+            state_dict = ckpt["state_dict"]
             self.chm_module_.load_state_dict(state_dict)
 
         self.chm_module = lambda x: 10 * self.chm_module_(x)
@@ -83,13 +83,19 @@ class SSLModule(pl.LightningModule):
 
 
 class NeonDataset(torch.utils.data.Dataset):
-    path = './data/images/'
+    path = "./data/images/"
     root_dir = Path(path)
-    df_path = './data/neon_test_data.csv'
+    df_path = "./data/neon_test_data.csv"
 
-    def __init__(self, model_norm, new_norm, src_img='maxar',
-                 trained_rgb=False, no_norm=False,
-                 **kwargs):
+    def __init__(
+        self,
+        model_norm,
+        new_norm,
+        src_img="maxar",
+        trained_rgb=False,
+        no_norm=False,
+        **kwargs,
+    ):
 
         self.no_norm = no_norm
         self.model_norm = model_norm
@@ -103,27 +109,29 @@ class NeonDataset(torch.utils.data.Dataset):
         self.size_multiplier = 6
 
     def __len__(self):
-        if self.src_img == 'neon':
+        if self.src_img == "neon":
             return 30 * len(self.df)
         return len(self.df)
 
     def __getitem__(self, i):
         n = self.size_multiplier
-        ix, jx, jy = i // (n ** 2), (i % (n ** 2)) // n, (i % (n ** 2)) % n
-        if self.src_img == 'neon':
+        ix, jx, jy = i // (n**2), (i % (n**2)) // n, (i % (n**2)) % n
+        if self.src_img == "neon":
             l = self.df.iloc[ix]
-        x = list(range(l.bord_x, l.imsize - l.bord_x - self.size, self.size))[
-            jx]
-        y = list(range(l.bord_y, l.imsize - l.bord_y - self.size, self.size))[
-            jy]
-        img = TF.to_tensor(Image.open(self.root_dir / l[self.src_img]).crop(
-            (x, y, x + self.size, y + self.size)))
-        chm = TF.to_tensor(Image.open(self.root_dir / l.chm).crop(
-            (x, y, x + self.size, y + self.size)))
+        x = list(range(l.bord_x, l.imsize - l.bord_x - self.size, self.size))[jx]
+        y = list(range(l.bord_y, l.imsize - l.bord_y - self.size, self.size))[jy]
+        img = TF.to_tensor(
+            Image.open(self.root_dir / l[self.src_img]).crop(
+                (x, y, x + self.size, y + self.size)
+            )
+        )
+        chm = TF.to_tensor(
+            Image.open(self.root_dir / l.chm).crop((x, y, x + self.size, y + self.size))
+        )
         chm[chm < 0] = 0
 
         if not self.trained_rgb:
-            if self.src_img == 'neon':
+            if self.src_img == "neon":
                 if self.no_norm:
                     normIn = img
                 else:
@@ -131,49 +139,60 @@ class NeonDataset(torch.utils.data.Dataset):
                         # image image normalization using learned quantiles of pairs of Maxar/Neon images
                         x = torch.unsqueeze(img, dim=0)
                         norm_img = self.model_norm(x).detach()
-                        p5I = [norm_img[0][0].item(), norm_img[0][1].item(),
-                               norm_img[0][2].item()]
-                        p95I = [norm_img[0][3].item(), norm_img[0][4].item(),
-                                norm_img[0][5].item()]
+                        p5I = [
+                            norm_img[0][0].item(),
+                            norm_img[0][1].item(),
+                            norm_img[0][2].item(),
+                        ]
+                        p95I = [
+                            norm_img[0][3].item(),
+                            norm_img[0][4].item(),
+                            norm_img[0][5].item(),
+                        ]
                     else:
                         # apply image normalization to aerial images, matching color intensity of maxar images
                         I = TF.to_tensor(
-                            Image.open(self.root_dir / l['maxar']).crop(
-                                (x, y, x + s, y + s)))
-                        p5I = [np.percentile(I[i, :, :].flatten(), 5) for i in
-                               range(3)]
-                        p95I = [np.percentile(I[i, :, :].flatten(), 95) for i in
-                                range(3)]
-                    p5In = [np.percentile(img[i, :, :].flatten(), 5) for i in
-                            range(3)]
+                            Image.open(self.root_dir / l["maxar"]).crop(
+                                (x, y, x + s, y + s)
+                            )
+                        )
+                        p5I = [np.percentile(I[i, :, :].flatten(), 5) for i in range(3)]
+                        p95I = [
+                            np.percentile(I[i, :, :].flatten(), 95) for i in range(3)
+                        ]
+                    p5In = [np.percentile(img[i, :, :].flatten(), 5) for i in range(3)]
 
-                    p95In = [np.percentile(img[i, :, :].flatten(), 95) for i in
-                             range(3)]
+                    p95In = [
+                        np.percentile(img[i, :, :].flatten(), 95) for i in range(3)
+                    ]
                     normIn = img.clone()
                     for i in range(3):
                         normIn[i, :, :] = (img[i, :, :] - p5In[i]) * (
-                                    (p95I[i] - p5I[i]) / (p95In[i] - p5In[i])) + \
-                                          p5I[i]
+                            (p95I[i] - p5I[i]) / (p95In[i] - p5In[i])
+                        ) + p5I[i]
 
-        return {'img': normIn,
-                'img_no_norm': img,
-                'chm': chm,
-                'lat': torch.Tensor([l.lat]).nan_to_num(0),
-                'lon': torch.Tensor([l.lon]).nan_to_num(0),
-                }
+        return {
+            "img": normIn,
+            "img_no_norm": img,
+            "chm": chm,
+            "lat": torch.Tensor([l.lat]).nan_to_num(0),
+            "lon": torch.Tensor([l.lon]).nan_to_num(0),
+        }
 
 
-def evaluate(model,
-             norm,
-             model_norm,
-             name,
-             bs=32,
-             trained_rgb=False,
-             normtype=2,
-             device='cuda:0',
-             no_norm=False,
-             display=False):
-    dataset_key = 'neon_aerial'
+def evaluate(
+    model,
+    norm,
+    model_norm,
+    name,
+    bs=32,
+    trained_rgb=False,
+    normtype=2,
+    device="cuda:0",
+    no_norm=False,
+    display=False,
+):
+    dataset_key = "neon_aerial"
 
     # choice of the normalization of aerial images.
     # i- For inference on satellite images args.normtype should be set to 0;
@@ -192,16 +211,25 @@ def evaluate(model,
         new_norm = True
 
     print(
-        f"AAAA    norm {norm}, name {name}, bs {bs}, trained_rgb {trained_rgb}, normtype {normtype}, device {device}, no_norm {no_norm}, display {display}")
+        f"AAAA    norm {norm}, name {name}, bs {bs}, trained_rgb {trained_rgb}, normtype {normtype}, device {device}, no_norm {no_norm}, display {display}"
+    )
 
-    ds = NeonDataset(model_norm, new_norm, domain='test', src_img='neon',
-                     trained_rgb=trained_rgb, no_norm=no_norm)
-    dataloader = torch.utils.data.DataLoader(ds, batch_size=bs, shuffle=True,
-                                             num_workers=10)
+    ds = NeonDataset(
+        model_norm,
+        new_norm,
+        domain="test",
+        src_img="neon",
+        trained_rgb=trained_rgb,
+        no_norm=no_norm,
+    )
+    dataloader = torch.utils.data.DataLoader(
+        ds, batch_size=bs, shuffle=True, num_workers=10
+    )
 
-    Path('../reports').joinpath(name).mkdir(parents=True, exist_ok=True)
-    Path('../reports/' + name).joinpath('results_for_fig_' + dataset_key).mkdir(
-        parents=True, exist_ok=True)
+    Path("../reports").joinpath(name).mkdir(parents=True, exist_ok=True)
+    Path("../reports/" + name).joinpath("results_for_fig_" + dataset_key).mkdir(
+        parents=True, exist_ok=True
+    )
     metrics = {}
 
     # canopy height metrics
@@ -209,7 +237,8 @@ def evaluate(model,
         mae=torchmetrics.MeanAbsoluteError(),
         rmse=torchmetrics.MeanSquaredError(squared=False),
         r2=torchmetrics.R2Score(),
-        r2_block=torchmetrics.R2Score())
+        r2_block=torchmetrics.R2Score(),
+    )
 
     downsampler = nn.AvgPool2d(50)
     bd = 3
@@ -220,10 +249,11 @@ def evaluate(model,
     fig_batch_ind = 0
 
     for batch in tqdm(dataloader):
-        chm = batch['chm'].detach()
-        batch = {k: v.to(device) for k, v in batch.items() if
-                 isinstance(v, torch.Tensor)}
-        pred = model(norm(batch['img']))
+        chm = batch["chm"].detach()
+        batch = {
+            k: v.to(device) for k, v in batch.items() if isinstance(v, torch.Tensor)
+        }
+        pred = model(norm(batch["img"]))
         pred = pred.cpu().detach().relu()
 
         if display == True:
@@ -231,45 +261,47 @@ def evaluate(model,
             for ind in range(pred.shape[0]):
                 fig, ax = plt.subplots(nrows=1, ncols=4, figsize=(20, 5))
                 plt.subplots_adjust(hspace=0.5)
-                img_no_norm = batch['img_no_norm'][ind].cpu()
+                img_no_norm = batch["img_no_norm"][ind].cpu()
                 Inn = np.moveaxis(img_no_norm.numpy(), 0, 2)
-                img = batch['img'][ind].cpu()
+                img = batch["img"][ind].cpu()
                 I = np.moveaxis(img.numpy(), 0, 2)
-                gt = batch['chm'][ind].cpu()
+                gt = batch["chm"][ind].cpu()
                 GT = np.moveaxis(gt.numpy(), 0, 2)
                 ax[0].imshow(Inn)
                 ax[0].set_title(f"Image", fontsize=12)
-                ax[0].set_xlabel('meters')
+                ax[0].set_xlabel("meters")
                 ax[1].imshow(I)
                 ax[1].set_title(f"Normalized Image ", fontsize=12)
-                ax[1].set_xlabel('meters')
-                combined_data = np.concatenate((batch['chm'][ind].cpu().numpy(),
-                                                pred[ind].detach().numpy()),
-                                               axis=0)
+                ax[1].set_xlabel("meters")
+                combined_data = np.concatenate(
+                    (batch["chm"][ind].cpu().numpy(), pred[ind].detach().numpy()),
+                    axis=0,
+                )
                 _min, _max = np.amin(combined_data), np.amax(combined_data)
-                pltim = ax[2].imshow(pred[ind][0].detach().numpy(), vmin=_min,
-                                     vmax=_max)
+                pltim = ax[2].imshow(
+                    pred[ind][0].detach().numpy(), vmin=_min, vmax=_max
+                )
                 ax[2].set_title(f"Pred CHM", fontsize=12)
-                ax[2].set_xlabel('meters')
+                ax[2].set_xlabel("meters")
                 pltim = ax[3].imshow(GT, vmin=_min, vmax=_max)
                 ax[3].set_title(f"GT CHM", fontsize=12)
-                ax[3].set_xlabel('meters')
+                ax[3].set_xlabel("meters")
                 cax = fig.add_axes([0.95, 0.15, 0.02, 0.7])
                 fig.colorbar(pltim, cax=cax, orientation="vertical")
                 cax.set_title("meters", fontsize=12)
-                plt.savefig(f"{name}/fig_{fig_batch_ind}_{ind}_{normtype}.png",
-                            dpi=300)
+                plt.savefig(f"{name}/fig_{fig_batch_ind}_{ind}_{normtype}.png", dpi=300)
 
             fig_batch_ind = fig_batch_ind + 1
 
         chm_block_mean = downsampler(chm[..., bd:, bd:])
         pred_block_mean = downsampler(pred[..., bd:, bd:])
 
-        metric_classes['mae'].update(pred, chm)
-        metric_classes['rmse'].update(pred, chm)
-        metric_classes['r2'].update(pred.flatten(), chm.flatten())
-        metric_classes['r2_block'].update(pred_block_mean.flatten(),
-                                          chm_block_mean.flatten())
+        metric_classes["mae"].update(pred, chm)
+        metric_classes["rmse"].update(pred, chm)
+        metric_classes["r2"].update(pred.flatten(), chm.flatten())
+        metric_classes["r2_block"].update(
+            pred_block_mean.flatten(), chm_block_mean.flatten()
+        )
 
         preds.append(pred), chms.append(chm)
         chm_block_means.append(chm_block_mean)
@@ -279,30 +311,36 @@ def evaluate(model,
     preds, chms = torch.cat(preds), torch.cat(chms)
 
     metrics = {k: v.compute() for k, v in metric_classes.items()}
-    torch.save(metrics, f'{name}/metrics.pt')
+    torch.save(metrics, f"{name}/metrics.pt")
 
     # print metrics
     for k, v in metrics.items():
-        print(f'{k} {v.item():.2f}')
+        print(f"{k} {v.item():.2f}")
     print(f"Bias: {(preds.flatten() - chms.flatten()).numpy().mean():.2f}")
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(
-        description='test a model')
-    parser.add_argument('--checkpoint', type=str,
-                        help='CHM pred checkpoint file',
-                        default='saved_checkpoints/compressed_SSLlarge.pth')
-    parser.add_argument('--name', type=str, help='run name',
-                        default='output_inference')
-    parser.add_argument('--trained_rgb', type=str,
-                        help='True if model was finetuned on aerial data')
-    parser.add_argument('--normnet', type=str,
-                        help='path to a normalization network',
-                        default='saved_checkpoints/aerial_normalization_quantiles_predictor.ckpt')
-    parser.add_argument('--normtype', type=int,
-                        help='0: no norm; 1: old norm, 2: new norm', default=2)
-    parser.add_argument('--display', type=bool, help='saving outputs in images')
+    parser = argparse.ArgumentParser(description="test a model")
+    parser.add_argument(
+        "--checkpoint",
+        type=str,
+        help="CHM pred checkpoint file",
+        default="saved_checkpoints/compressed_SSLlarge.pth",
+    )
+    parser.add_argument("--name", type=str, help="run name", default="output_inference")
+    parser.add_argument(
+        "--trained_rgb", type=str, help="True if model was finetuned on aerial data"
+    )
+    parser.add_argument(
+        "--normnet",
+        type=str,
+        help="path to a normalization network",
+        default="saved_checkpoints/aerial_normalization_quantiles_predictor.ckpt",
+    )
+    parser.add_argument(
+        "--normtype", type=int, help="0: no norm; 1: old norm, 2: new norm", default=2
+    )
+    parser.add_argument("--display", type=bool, help="saving outputs in images")
     args = parser.parse_args()
     return args
 
@@ -310,20 +348,20 @@ def parse_args():
 def main():
     # 0- read args
     args = parse_args()
-    if 'compressed' in args.checkpoint:
-        device = 'cpu'
+    if "compressed" in args.checkpoint:
+        device = "cpu"
     else:
-        device = 'cuda:0'
+        device = "cuda:0"
 
     os.system("mkdir " + args.name)
 
     # 1- load network and its weight to normalize aerial images to match intensities from satellite images.
     norm_path = args.normnet
-    ckpt = torch.load(norm_path, map_location='cpu')
-    state_dict = ckpt['state_dict']
+    ckpt = torch.load(norm_path, map_location="cpu")
+    state_dict = ckpt["state_dict"]
     for k in list(state_dict.keys()):
-        if 'backbone.' in k:
-            new_k = k.replace('backbone.', '')
+        if "backbone." in k:
+            new_k = k.replace("backbone.", "")
             state_dict[new_k] = state_dict.pop(k)
 
     model_norm = RNet(n_classes=6)
@@ -340,10 +378,18 @@ def main():
     norm = norm.to(device)
 
     # 4- evaluation
-    evaluate(model, norm, model_norm, name=args.name, bs=16,
-             trained_rgb=args.trained_rgb, normtype=args.normtype,
-             device=device, display=args.display)
+    evaluate(
+        model,
+        norm,
+        model_norm,
+        name=args.name,
+        bs=16,
+        trained_rgb=args.trained_rgb,
+        normtype=args.normtype,
+        device=device,
+        display=args.display,
+    )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
